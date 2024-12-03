@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Tsisa.Blockchain.Services;
 
 public class Block
 {
@@ -11,6 +12,8 @@ public class Block
     public string Hash { get; set; }
     public string HashSignature { get; set; }
     public string DataSignature { get; set; }
+    public string ArbiterTimestampString { get; set; }
+    public string ArbiterSignature { get; set; }
 
     public Block(int index, string previousHash, string data)
     {
@@ -20,36 +23,51 @@ public class Block
         Timestamp = DateTime.UtcNow;
         Hash = CalculateHash();
     }
-    
-    public bool VerifySignatures(RSA publicKey)
-    {
-        var hash = Encoding.UTF8.GetBytes(Hash);
-        var hashSignatureBytes = Convert.FromBase64String(HashSignature);
-        
-        var data = Encoding.UTF8.GetBytes(Data);
-        var dataSignatureBytes = Convert.FromBase64String(DataSignature);
-        
-        return publicKey.VerifyData(hash, hashSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1) && 
-               publicKey.VerifyData(data, dataSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-    }
 
+    public async Task SignBlock(RSA privateKey, KeyService timestampService)
+    {
+        var hashBytes = Encoding.UTF8.GetBytes(Hash);
+        var dataBytes = Encoding.UTF8.GetBytes(Data);
+
+        var hashSignature = privateKey.SignData(hashBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var dataSignature = privateKey.SignData(dataBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+
+        HashSignature = Convert.ToHexString(hashSignature);
+        DataSignature = Convert.ToHexString(dataSignature);
+        
+        var timestampResponse = await timestampService.GetPrivateArbiterKey(Convert.ToHexString(hashBytes));
+
+        ArbiterTimestampString = timestampResponse.TimeStampToken.Ts;
+        ArbiterSignature = timestampResponse.TimeStampToken.Signature;
+    }
+    
     public string CalculateHash()
     {
         using var sha256 = SHA256.Create();
         var input = $"{Index}{PreviousHash}{Timestamp}{Data}";
         var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(input));
-        return Convert.ToBase64String(bytes);
+        return Convert.ToHexString(bytes);
     }
 
-    public void SignBlock(RSA privateKey)
+    public bool VerifySignatures(RSA publicKey, RSA arbiterPublicKey)
     {
-        var hashSignatureBytes = Encoding.UTF8.GetBytes(Hash);
-        var dataSignatureBytes =  Encoding.UTF8.GetBytes(Data);
-        var hashSignature = privateKey.SignData(hashSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        var dataSignature = privateKey.SignData(dataSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
-        
-        HashSignature = Convert.ToBase64String(hashSignature);
-        DataSignature = Convert.ToBase64String(dataSignature);
+        var hashBytes = Encoding.UTF8.GetBytes(Hash);
+        var hashSignatureBytes = Convert.FromHexString(HashSignature);
+
+        var dataBytes = Encoding.UTF8.GetBytes(Data);
+        var dataSignatureBytes = Convert.FromHexString(DataSignature);
+
+        var arbiterInput = Encoding.UTF8.GetBytes(ArbiterTimestampString).Concat(Encoding.UTF8.GetBytes(Hash))
+            .ToArray();
+        var arbiterSignatureBytes = Convert.FromHexString(ArbiterSignature);
+
+        var areSignaturesValid =
+            publicKey.VerifyData(hashBytes, hashSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1) &&
+            publicKey.VerifyData(dataBytes, dataSignatureBytes, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1) &&
+            arbiterPublicKey.VerifyData(arbiterInput, arbiterSignatureBytes, HashAlgorithmName.SHA256,
+                RSASignaturePadding.Pkcs1);
+
+        return areSignaturesValid;
     }
     
     public override string ToString()
@@ -60,6 +78,8 @@ public class Block
                $"Timestamp: {Timestamp}\n" +
                $"Hash: {Hash}\n" +
                $"Hash Signature: {HashSignature}\n" +
-               $"Data Signature: {DataSignature}";
+               $"Data Signature: {DataSignature}\n" +
+               $"Hash Signature: {HashSignature}\n" +
+               $"Arbiter Hash Signature: {ArbiterSignature}";
     }
 }

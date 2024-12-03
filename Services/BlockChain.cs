@@ -1,13 +1,13 @@
 using System.Security.Cryptography;
 using Tsisa.Blockchain.Persistence;
+using Tsisa.Blockchain.Services;
 
-public class Blockchain(BlockchainContext context)
+public class Blockchain(BlockchainContext context, KeyService keyService)
 {
-    public void AddBlock(Block newBlock, RSA privateKey)
+    
+    public async Task AddBlock(Block newBlock, RSA privateKey)
     {
-        newBlock.Hash = newBlock.CalculateHash();
-        
-        newBlock.SignBlock(privateKey);
+        await newBlock.SignBlock(privateKey, keyService);
         
         if (context.Blocks.Any())
         {
@@ -20,10 +20,10 @@ public class Blockchain(BlockchainContext context)
         }
         
         context.Blocks.Add(newBlock);
-        context.SaveChanges();
+        await context.SaveChangesAsync();
     }
     
-    public bool ValidateBlockchain(RSA publicKey)
+    public bool ValidateBlockchain(RSA publicKey, RSA publicArbiterKey)
     {
         var blocks = context.Blocks.OrderBy(b => b.Index).ToList();
         
@@ -33,20 +33,18 @@ public class Blockchain(BlockchainContext context)
             var previousBlock = blocks[i - 1];
             
             if (currentBlock.PreviousHash != previousBlock.Hash ||
-                !currentBlock.VerifySignatures(publicKey))
-            {
+                !currentBlock.VerifySignatures(publicKey, publicArbiterKey))
                 return false;
-            }
         }
 
         return true;
     }
     
-    public string? GetBlock(RSA publicKey, int blockIndex)
+    public string? GetBlock(RSA publicKey, RSA publicArbiterKey, int blockIndex)
     {
         var block = context.Blocks.FirstOrDefault(x => x.Index == blockIndex);
 
-        if (block is not null && block.VerifySignatures(publicKey))
+        if (block is not null && block.VerifySignatures(publicKey, publicArbiterKey))
             return block.ToString();
 
         return null;

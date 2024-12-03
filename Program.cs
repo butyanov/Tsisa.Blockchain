@@ -1,34 +1,27 @@
 ﻿using System.Security.Cryptography;
 using Tsisa.Blockchain.Persistence;
+using Tsisa.Blockchain.Services;
+
+var context = new BlockchainContext();
+var keyService = new KeyService();
+var blockchain = new Blockchain(context, keyService);
 
 using var privateRsa = RSA.Create();
 using var publicRsa = RSA.Create();
-
-GetSigns(privateRsa, publicRsa);
-
-var context = new BlockchainContext();
-var blockchain = new Blockchain(context);
+KeyService.GetBlockOwnerKeyPair(privateRsa, publicRsa);
+using var publicArbiterRsa = await keyService.GetPublicArbiterKey();
 
 var genesisBlock = new Block(0, "0", "Genesis Block");
-blockchain.AddBlock(genesisBlock, privateRsa);
+await blockchain.AddBlock(genesisBlock, privateRsa);
 
 var secondBlock = new Block(1, genesisBlock.Hash, "Second Block");
-blockchain.AddBlock(secondBlock, privateRsa);
+await blockchain.AddBlock(secondBlock, privateRsa);
 
-var block = blockchain.GetBlock(publicRsa, 1);
+var block = blockchain.GetBlock(publicRsa, publicArbiterRsa, 1);
 Console.WriteLine($"Block readonly: {block}");
 
-var isValid = blockchain.ValidateBlockchain(publicRsa);
+var isValid = blockchain.ValidateBlockchain(publicRsa, publicArbiterRsa);
 Console.WriteLine($"Blockchain valid: {isValid}");
 
 
-static void GetSigns(RSA privateRsa, RSA publicRsa){
-    using var rsa = RSA.Create(2048);
 
-    var privateKey = rsa.ExportRSAPrivateKey();
-    var publicKey = rsa.ExportRSAPublicKey();
-    
-    privateRsa.ImportRSAPrivateKey(privateKey, out _);
-    
-    publicRsa.ImportRSAPublicKey(publicKey, out _);
-}

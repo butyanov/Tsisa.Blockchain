@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Tsisa.Blockchain.Persistence;
@@ -11,9 +12,11 @@ using Tsisa.Blockchain.Persistence;
 namespace Tsisa.Blockchain.Migrations
 {
     [DbContext(typeof(BlockchainContext))]
-    partial class BlockchainContextModelSnapshot : ModelSnapshot
+    [Migration("20241203124246_AddArbiter")]
+    partial class AddArbiter
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -34,9 +37,8 @@ namespace Tsisa.Blockchain.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<string>("ArbiterTimestampString")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<DateTime>("ArbiterTimestamp")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("Data")
                         .IsRequired()
